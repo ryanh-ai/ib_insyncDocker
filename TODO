@@ -1,0 +1,5 @@
+add tests
+enable container health check
+add fargate auto-deployment to VPC
+enable getting streaming quotes and pushing to Kinesis Firehose
+
