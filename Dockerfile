@@ -60,6 +60,7 @@ RUN apt-get install -y git \
 ENV DISPLAY=:0
 COPY init /etc/init.d
 COPY root /root
+COPY jts.ini /opt/ibc/
 RUN chmod u+x /etc/init.d/* \
 	&& chmod u+x /root/*
 
