@@ -1,25 +1,30 @@
 import os
 import fileinput
 from shutil import copyfile
+import boto3
+import ssm_parameter_store as ssm
 
 CONFIG_FILE_TEMPLATE = 'config_template.ini'
 CONFIG_FILE = 'config.ini'
 
 def updateSecrets(templateFile=CONFIG_FILE_TEMPLATE, 
-                  outputFile=CONFIG_FILE):
-    if False:
-        #Add AWS Secrets Manager Extract
-        pass
-    elif os.environ.get('IB_USER', False):
-        userName = os.environ['IB_USER']
+                  outputFile=CONFIG_FILE,
+                  secretsPath='/ibc/paper/'):
+
+    store = ssm.EC2ParameterStore()
+    secrets = store.get_parameters_with_hierarchy(secretsPath)
+
+    if secrets.get('TWS_USER', False):
+        userName = secrets['TWS_USER']
+    elif os.environ.get('TWS_USER', False):
+        userName = os.environ['TWS_USER']
     else:
         raise Exception("ERROR: No IB Username Set")
 
-    if False:
-        #Add AWS Secrets Manager Extract
-        pass
-    elif os.environ.get('IB_PASSWORD', False):
-        userPassword = os.environ['IB_PASSWORD']
+    if secrets.get('TWS_PASSWORD', False):
+        userPassword = secrets['TWS_PASSWORD']
+    elif os.environ.get('TWS_PASSWORD', False):
+        userPassword = os.environ['TWS_PASSWORD']
     else:
         raise Exception("ERROR: No IB Password Set")
 

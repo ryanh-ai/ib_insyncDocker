@@ -12,11 +12,12 @@ ibcPath = os.getenv("IBC_PATH", "/opt/ibc")
 homePath = os.getenv("HOME", "/root")
 twsPath = os.getenv("TWS_PATH", "~/Jts")
 twsLiveorPaperMode = os.getenv("TWS_LIVE_PAPER", "paper")
-configTemplate = homePath + '/config_template.ini'
-config = homePath + '/config.ini'
+secretsPath = os.getenv("SECRETS_PATH", "/ibc/paper/")
+configTemplate = homePath + "/config_template.ini"
+config = homePath + "/config.ini"
 
-logger.info('Updating Secrets')
-updateSecrets(configTemplate, config) 
+logger.info("Updating Secrets")
+updateSecrets(configTemplate, config, secretsPath=secretsPath)
 
 ibc = ibcontroller.IBC(
     twsVersion=972,
@@ -40,5 +41,3 @@ watchdog = Watchdog(
 )
 watchdog.start()
 IB.run()
-
-

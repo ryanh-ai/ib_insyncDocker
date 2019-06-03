@@ -23,7 +23,10 @@ RUN echo '2' | apt-get install -y \
 RUN apt-get install -y python3-pip python3-dev \
   	&& cd /usr/local/bin \
  	&& ln -s /usr/bin/python3 python \
-  	&& pip3 install --upgrade pip
+ 	&& ln -s /usr/bin/pip3 pip \
+  	#&& pip3 install --upgrade pip \
+	&& pip install boto3 \ 
+    && pip install ssm-parameter-store
 
 # Set env vars for IBG/IBC
 ENV IBG_VERSION=972-stable \
