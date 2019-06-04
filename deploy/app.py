@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-from aws_cdk import (
+from aws_cdk import ( 
     aws_ec2 as ec2,
     aws_ecs as ecs,
     aws_ecr as ecr,
@@ -8,27 +8,9 @@ from aws_cdk import (
     aws_ssm as ssm,
     aws_secretsmanager as secretsmanger,
     aws_iam as iam,
+    aws_servicediscovery as servicediscovery,
     cdk,
 )
-
-SSM_POLICY_STATEMENT = """
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Effect": "Allow",
-      "Action": [
-        "ssm:GetParameters",
-        "kms:Decrypt"
-      ],
-      "Resource": [
-        "arn:aws:ssm:<region>:<aws_account_id>:parameter/parameter_name",
-        "arn:aws:kms:<region>:<aws_account_id>:key/key_id"
-      ]
-    }
-  ]
-}
-"""
 
 
 class IBC(cdk.Stack):
@@ -36,14 +18,19 @@ class IBC(cdk.Stack):
         self,
         scope: cdk.Construct,
         id: str,
+        name: str,
+        vpc_name: str,
+        security_group_name: str,
         secrets_path: str = "/ibc/paper/",
         trading_mode: str = "paper",
         **kwargs
     ) -> None:
         super().__init__(scope, id, *kwargs)
 
+        # TODO: Create Log Group
+
         # Create a cluster
-        vpc = ec2.Vpc.from_lookup(self, "sandbox-VPC", vpc_name="sandbox-VPC")
+        vpc = ec2.Vpc.from_lookup(self, "vpc", vpc_name=vpc_name)
 
         privateSubnets = vpc.private_subnets
 
@@ -70,16 +57,18 @@ class IBC(cdk.Stack):
 
         environment = {"SECRETS_PATH": secrets_path, "TWS_LIVE_PAPER": trading_mode}
 
-        cluster = ecs.Cluster(self, "ibctest", vpc=vpc)
+        cluster = ecs.Cluster(self, "cluster", vpc=vpc)
+        #TODO: check for namespace before adding below.  This is failing on stack updates.
+        cluster.add_default_cloud_map_namespace(name="private")
 
-        task = ecs.FargateTaskDefinition(
-            self, "ibctask", cpu="1024", memory_mi_b="2048"
-        )
+        task = ecs.FargateTaskDefinition(self, "task", cpu="512", memory_mi_b="1024")
 
-        #Add SSM Permissions to IAM Role
+        # Add SSM Permissions to IAM Role
         SSM_ACTIONS = ["ssm:GetParametersByPath", "kms:Decrypt"]
-        SSM_RESOURCES = ["arn:aws:kms:*:*:alias/aws/ssm",
-                         "arn:aws:ssm:*:*:parameter{}*".format(secrets_path)]
+        SSM_RESOURCES = [
+            "arn:aws:kms:*:*:alias/aws/ssm",
+            "arn:aws:ssm:*:*:parameter{}*".format(secrets_path),
+        ]
         ssmPolicy = iam.PolicyStatement(iam.PolicyStatementEffect.Allow)
         for action in SSM_ACTIONS:
             ssmPolicy.add_action(action)
@@ -87,38 +76,44 @@ class IBC(cdk.Stack):
             ssmPolicy.add_resource(resource)
         task.add_to_task_role_policy(ssmPolicy)
 
-        ibcRepo = ecr.Repository.from_repository_name(self, "ibcrepo", "ibc")
+        ibcRepo = ecr.Repository.from_repository_name(self, "container_repo", "ibc")
 
         ibcImage = ecs.ContainerImage.from_ecr_repository(ibcRepo, "latest")
 
+        #TODO: Add to Existing Hierarchal Logger, add log_group argument with ref to it
+        ibcLogger = ecs.AwsLogDriver(
+                self, "logger", stream_prefix=name
+            )
+
         ibcContainer = ecs.ContainerDefinition(
             self,
-            "ibccontainer",
+            "container",
             task_definition=task,
             image=ibcImage,
             environment=environment,
-            logging=ecs.AwsLogDriver(self, "ibc_logger", stream_prefix="ibc_container"),
+            logging=ibcLogger,
             essential=True,
         )
 
         securityGroup = ec2.SecurityGroup.from_security_group_id(
-            self, "ibc-sg", security_group_id="sg-2cc6a145"
+            self, "task_security_group", security_group_id=security_group_name
         )
 
         ibcService = ecs.FargateService(
             self,
-            "ibcservice",
+            "fargate_service",
             cluster=cluster,
             task_definition=task,
             assign_public_ip=False,
             desired_count=1,
             security_group=securityGroup,
-            # serviceDiscoveryOptions=None,
-            service_name="ibc",
+            service_discovery_options=ecs.ServiceDiscoveryOptions(name=name),
+            service_name=name,
             vpc_subnets=privateSubnets,
         )
 
 
 app = cdk.App()
-IBC(app, "ibcfargate-live", secrets_path="/ibc/live/", trading_mode="live")
+IBC(app, "ibc-live", "ibc-live", secrets_path="/ibc/live/", trading_mode="live",
+    vpc_name='sandbox-VPC', security_group_name='sg-2cc6a145')
 app.run()
