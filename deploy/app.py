@@ -116,4 +116,6 @@ class IBC(cdk.Stack):
 app = cdk.App()
 IBC(app, "ibc-live", "ibc-live", secrets_path="/ibc/live/", trading_mode="live",
     vpc_name='sandbox-VPC', security_group_name='sg-2cc6a145')
+IBC(app, "ibc-paper", "ibc-paper", secrets_path="/ibc/paper/", trading_mode="paper",
+    vpc_name='sandbox-VPC', security_group_name='sg-2cc6a145')
 app.run()
