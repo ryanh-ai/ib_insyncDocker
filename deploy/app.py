@@ -34,27 +34,6 @@ class IBC(cdk.Stack):
 
         privateSubnets = vpc.private_subnets
 
-        # NOTE: secrets manager doesn't allow you to lookup secret by name for ECS yet
-        #  EX: '{{resolve:secretsmanager:MySecret:SecretString:password}}'
-        #  user = ssm.ParameterStoreSecureString(
-        #      parameter_name=secret_prefix + "TWS_USER", version=1
-        #  ).to_string()
-        #  user = ssm.ParameterStoreString(self, 'user',
-        #  parameter_name=secret_prefix + "TWS_USER", version=1
-        #  )
-        #  user = "{{{{resolve:secretsmanger:{}TWS_USER}}}}".format(secret_prefix)
-        #
-        #  password = ssm.ParameterStoreString(self, 'password',
-        #  parameter_name=secret_prefix + "TWS_PASSWORD", version=1
-        #  )
-        #  password = "{{{{resolve:secretsmanger:{}TWS_PASSWORD}}}}".format(secret_prefix)
-        #
-        #  mode = ssm.ParameterStoreString(self, 'mode',
-        #  parameter_name=secret_prefix + "TWS_LIVE_PAPER", version=1
-        #  )
-        #  mode = "{{{{resolve:secretsmanger:{}TWS_LIVE_PAPER}}}}".format(secret_prefix)
-        #
-
         environment = {"SECRETS_PATH": secrets_path, "TWS_LIVE_PAPER": trading_mode}
 
         cluster = ecs.Cluster(self, "cluster", vpc=vpc)
