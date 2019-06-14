@@ -34,9 +34,9 @@ watchdog = Watchdog(
     ibc,
     ib,
     port=4001,
-    connectTimeout=30,
+    connectTimeout=59,
     appStartupTime=45,
-    appTimeout=45,
+    appTimeout=59,
     retryDelay=10,
 )
 watchdog.start()
