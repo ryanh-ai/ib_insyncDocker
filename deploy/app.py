@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-from aws_cdk import ( 
+from aws_cdk import (
     aws_ec2 as ec2,
     aws_ecs as ecs,
     aws_ecr as ecr,
@@ -9,6 +9,7 @@ from aws_cdk import (
     aws_secretsmanager as secretsmanger,
     aws_iam as iam,
     aws_servicediscovery as servicediscovery,
+    aws_logs as logs,
     cdk,
 )
 
@@ -37,7 +38,7 @@ class IBC(cdk.Stack):
         environment = {"SECRETS_PATH": secrets_path, "TWS_LIVE_PAPER": trading_mode}
 
         cluster = ecs.Cluster(self, "cluster", vpc=vpc)
-        #TODO: check for namespace before adding below.  This is failing on stack updates.
+        # TODO: check for namespace before adding below.  This is failing on stack updates.
         cluster.add_default_cloud_map_namespace(name="private")
 
         task = ecs.FargateTaskDefinition(self, "task", cpu="512", memory_mi_b="1024")
@@ -59,10 +60,27 @@ class IBC(cdk.Stack):
 
         ibcImage = ecs.ContainerImage.from_ecr_repository(ibcRepo, "latest")
 
-        #TODO: Add to Existing Hierarchal Logger, add log_group argument with ref to it
-        ibcLogger = ecs.AwsLogDriver(
-                self, "logger", stream_prefix=name
-            )
+        # TODO: Add to Existing Hierarchal Logger, add log_group argument with ref to it
+        ibcLogger = ecs.AwsLogDriver(self, "logger", stream_prefix=name)
+
+        connectionLossMetric = logs.MetricFilter(
+            self,
+            "connectionLossMetric",
+            filter_pattern=logs.FilterPattern.literal("ERROR ?110 ?130"),
+            log_group=ibcLogger.log_group,
+            metric_name="ib_connection_loss",
+            metric_namespace=name,
+        )
+
+        newContainerMetric = logs.MetricFilter(
+            self,
+            "newContainerMetric",
+            filter_pattern=logs.FilterPattern.literal("Starting virtual X frame buffer"),
+            log_group=ibcLogger.log_group,
+            metric_name="new_container",
+            metric_namespace=name,
+        )
+
 
         ibcContainer = ecs.ContainerDefinition(
             self,
@@ -93,8 +111,22 @@ class IBC(cdk.Stack):
 
 
 app = cdk.App()
-IBC(app, "ibc-live", "ibc-live", secrets_path="/ibc/live/", trading_mode="live",
-    vpc_name='sandbox-VPC', security_group_name='sg-2cc6a145')
-IBC(app, "ibc-paper", "ibc-paper", secrets_path="/ibc/paper/", trading_mode="paper",
-    vpc_name='sandbox-VPC', security_group_name='sg-2cc6a145')
+IBC(
+    app,
+    "ibc-live",
+    "ibc-live",
+    secrets_path="/ibc/live/",
+    trading_mode="live",
+    vpc_name="sandbox-VPC",
+    security_group_name="sg-2cc6a145",
+)
+IBC(
+    app,
+    "ibc-paper",
+    "ibc-paper",
+    secrets_path="/ibc/paper/",
+    trading_mode="paper",
+    vpc_name="sandbox-VPC",
+    security_group_name="sg-2cc6a145",
+)
 app.run()
