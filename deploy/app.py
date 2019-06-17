@@ -10,6 +10,9 @@ from aws_cdk import (
     aws_iam as iam,
     aws_servicediscovery as servicediscovery,
     aws_logs as logs,
+    aws_kinesis as kinesis,
+    aws_kinesisfirehose as firehose,
+    aws_s3 as s3,
     cdk,
 )
 
@@ -34,8 +37,6 @@ class IBC(cdk.Stack):
         vpc = ec2.Vpc.from_lookup(self, "vpc", vpc_name=vpc_name)
 
         privateSubnets = vpc.private_subnets
-
-        environment = {"SECRETS_PATH": secrets_path, "TWS_LIVE_PAPER": trading_mode}
 
         cluster = ecs.Cluster(self, "cluster", vpc=vpc)
         # TODO: check for namespace before adding below.  This is failing on stack updates.
@@ -75,12 +76,69 @@ class IBC(cdk.Stack):
         newContainerMetric = logs.MetricFilter(
             self,
             "newContainerMetric",
-            filter_pattern=logs.FilterPattern.literal("Starting virtual X frame buffer"),
+            filter_pattern=logs.FilterPattern.literal(
+                "Starting virtual X frame buffer"
+            ),
             log_group=ibcLogger.log_group,
             metric_name="new_container",
             metric_namespace=name,
         )
 
+        kinesisFirehoseBucketActions = [
+            "s3:AbortMultipartUpload",
+            "s3:GetBucketLocation",
+            "s3:GetObject",
+            "s3:ListBucket",
+            "s3:ListBucketMultipartUploads",
+        ]
+
+        kinesisFirehoseBucket = s3.Bucket(self, "firehoseBucket")
+
+        kinesisFirehoseBucketPolicy = iam.PolicyStatement(
+            iam.PolicyStatementEffect.Allow
+        )
+        for action in kinesisFirehoseBucketActions:
+            kinesisFirehoseBucketPolicy.add_action(action)
+        for resource in [
+            kinesisFirehoseBucket.bucket_arn,
+            kinesisFirehoseBucket.bucket_arn + "/*",
+        ]:
+            kinesisFirehoseBucketPolicy.add_resource(resource)
+
+        kinesisFirehoseBucketRole = iam.Role(
+            self,
+            "kinesisFirehoseBucketRole",
+            assumed_by=iam.ServicePrincipal("firehose.amazonaws.com"),
+            path="/service/" + name + "/",
+        )
+        kinesisFirehoseBucketRole.add_to_policy(kinesisFirehoseBucketPolicy)
+
+        kinesisFirehose = firehose.CfnDeliveryStream(
+            self,
+            "firehose",
+            delivery_stream_name=name,
+            delivery_stream_type="DirectPut",
+            s3_destination_configuration={
+                "bucketArn": kinesisFirehoseBucket.bucket_arn,
+                "bufferingHints": {"intervalInSeconds": 10 * 60, "sizeInMBs": 16},
+                "compressionFormat": "GZIP",
+                "roleArn": kinesisFirehoseBucketRole.role_arn,
+            },
+        )
+
+        # Add Firehose Permissions to Task IAM Role
+        FIREHOSE_ACTIONS = ["firehose:PutRecord", "firehose:PutRecordBatch"]
+        firehosePolicy = iam.PolicyStatement(iam.PolicyStatementEffect.Allow)
+        for action in FIREHOSE_ACTIONS:
+            firehosePolicy.add_action(action)
+        firehosePolicy.add_resource(kinesisFirehose.delivery_stream_arn)
+        task.add_to_task_role_policy(firehosePolicy)
+
+        environment = {
+            "SECRETS_PATH": secrets_path,
+            "TWS_LIVE_PAPER": trading_mode,
+            "FIREHOSE_STREAM_NAME": kinesisFirehose.delivery_stream_name,
+        }
 
         ibcContainer = ecs.ContainerDefinition(
             self,
